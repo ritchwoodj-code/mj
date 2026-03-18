@@ -266,19 +266,24 @@ function showTab(name, el) {
 }
 
 // =============================================
-//  DATA FETCHING - Yahoo Finance via public CORS proxies
+//  DATA FETCHING - Yahoo Finance via CORS proxies
 // =============================================
-const PROXIES = [
-    'https://query1.finance.yahoo.com',
-    'https://query2.finance.yahoo.com',
+const YAHOO_BASE = 'https://query1.finance.yahoo.com';
+const CORS_PROXIES = [
+    (u) => 'https://corsproxy.io/?' + encodeURIComponent(u),
+    (u) => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+    (u) => u, // try direct as last resort
 ];
 
 async function fetchYahoo(url) {
-    // Try direct Yahoo first
-    for (const base of PROXIES) {
+    const fullUrl = YAHOO_BASE + url;
+    for (const proxy of CORS_PROXIES) {
         try {
-            const r = await fetch(base + url);
-            if (r.ok) { liveMode = true; return await r.json(); }
+            const r = await fetch(proxy(fullUrl), { signal: AbortSignal.timeout(8000) });
+            if (r.ok) {
+                const data = await r.json();
+                if (data && data.chart) { liveMode = true; return data; }
+            }
         } catch(e) {}
     }
     return null;
@@ -964,8 +969,8 @@ async function init() {
     // First agent run
     runAgent();
 
-    // Price poll every 1s
-    setInterval(pollPrices, 1000);
+    // Price poll every 3s (avoid CORS proxy rate limits)
+    setInterval(pollPrices, 3000);
     // Agent runs every 5s
     setInterval(runAgent, 5000);
     // Refresh chart every 30s
