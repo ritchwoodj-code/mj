@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Futures Trading Agent</title>
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-card: #1a2332;
+            --border: #2a3a4e;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --green: #10b981;
+            --red: #ef4444;
+            --blue: #3b82f6;
+            --yellow: #f59e0b;
+            --purple: #8b5cf6;
+            --cyan: #06b6d4;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'SF Mono','Fira Code','Cascadia Code','Courier New',monospace; background:var(--bg-primary); color:var(--text-primary); overflow-x:hidden; }
+
+        .header { display:flex; justify-content:space-between; align-items:center; padding:10px 20px; background:var(--bg-secondary); border-bottom:1px solid var(--border); }
+        .header-title { font-size:16px; font-weight:700; color:var(--cyan); letter-spacing:1px; }
+        .header-right { display:flex; align-items:center; gap:12px; }
+        .badge { padding:3px 10px; border-radius:10px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
+        .badge-active { background:rgba(16,185,129,.15); color:var(--green); border:1px solid rgba(16,185,129,.3); }
+        .badge-inactive { background:rgba(239,68,68,.15); color:var(--red); border:1px solid rgba(239,68,68,.3); }
+        .badge-sim { background:rgba(139,92,246,.15); color:var(--purple); border:1px solid rgba(139,92,246,.3); }
+        .clock { font-size:12px; color:var(--text-secondary); }
+
+        .main { display:grid; grid-template-columns:1fr 360px; grid-template-rows:auto 1fr; height:calc(100vh - 48px); }
+
+        /* Tickers */
+        .tickers { grid-column:1/-1; display:flex; border-bottom:1px solid var(--border); }
+        .ticker { flex:1; padding:10px 18px; background:var(--bg-secondary); display:flex; justify-content:space-between; align-items:center; border-right:1px solid var(--border); }
+        .ticker:last-child { border-right:none; }
+        .ticker-name { font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; }
+        .ticker-price { font-size:22px; font-weight:700; transition:color .3s; }
+        .ticker-info { text-align:right; }
+        .bias-badge { font-size:10px; padding:2px 7px; border-radius:4px; text-transform:uppercase; font-weight:600; }
+        .bias-bullish { background:rgba(16,185,129,.15); color:var(--green); }
+        .bias-bearish { background:rgba(239,68,68,.15); color:var(--red); }
+        .bias-neutral { background:rgba(245,158,11,.15); color:var(--yellow); }
+        .price-up { color:var(--green); }
+        .price-down { color:var(--red); }
+        @keyframes flash { 0%{opacity:1} 50%{opacity:.5} 100%{opacity:1} }
+        .flash { animation:flash .3s; }
+
+        /* Chart */
+        .chart-area { display:flex; flex-direction:column; background:var(--bg-primary); }
+        .chart-controls { display:flex; align-items:center; gap:6px; padding:6px 12px; background:var(--bg-secondary); border-bottom:1px solid var(--border); flex-wrap:wrap; }
+        .chart-controls label { font-size:10px; color:var(--text-muted); text-transform:uppercase; }
+        .btn { padding:3px 9px; border:1px solid var(--border); border-radius:3px; background:transparent; color:var(--text-secondary); font-size:10px; font-family:inherit; cursor:pointer; }
+        .btn:hover { border-color:var(--cyan); color:var(--cyan); }
+        .btn.active { background:rgba(6,182,212,.15); border-color:var(--cyan); color:var(--cyan); }
+        .chart-box { flex:1; }
+
+        /* Right Panel */
+        .right { display:flex; flex-direction:column; background:var(--bg-secondary); border-left:1px solid var(--border); overflow:hidden; }
+        .tabs { display:flex; border-bottom:1px solid var(--border); }
+        .tab { flex:1; padding:8px; text-align:center; font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted); cursor:pointer; border-bottom:2px solid transparent; }
+        .tab:hover { color:var(--text-secondary); }
+        .tab.active { color:var(--cyan); border-bottom-color:var(--cyan); }
+        .panel { flex:1; overflow-y:auto; }
+        .section { display:none; }
+        .section.active { display:block; }
+
+        /* Signals */
+        .signal { padding:12px 14px; border-bottom:1px solid var(--border); }
+        .signal:hover { background:rgba(26,35,50,.8); }
+        .sig-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+        .sig-dir { font-size:11px; font-weight:700; padding:2px 8px; border-radius:3px; text-transform:uppercase; }
+        .sig-long { background:rgba(16,185,129,.2); color:var(--green); }
+        .sig-short { background:rgba(239,68,68,.2); color:var(--red); }
+        .sig-levels { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin:6px 0; }
+        .sig-lv { text-align:center; }
+        .sig-lv-label { font-size:8px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; }
+        .sig-lv-val { font-size:13px; font-weight:600; margin-top:1px; }
+        .sig-entry { color:var(--blue); }
+        .sig-sl { color:var(--red); }
+        .sig-tp { color:var(--green); }
+        .sig-setup { font-size:10px; color:var(--purple); font-weight:600; }
+        .sig-reasons { font-size:9px; color:var(--text-secondary); margin-top:4px; line-height:1.5; }
+        .sig-meta { font-size:9px; color:var(--text-muted); margin-top:4px; }
+        .rr { font-size:9px; padding:1px 5px; border-radius:2px; background:rgba(139,92,246,.2); color:var(--purple); font-weight:600; }
+        .sig-status { font-size:9px; padding:1px 5px; border-radius:2px; font-weight:600; }
+        .st-active { background:rgba(59,130,246,.2); color:var(--blue); }
+        .st-invalid { background:rgba(245,158,11,.2); color:var(--yellow); }
+        .st-tp { background:rgba(16,185,129,.2); color:var(--green); }
+        .st-sl { background:rgba(239,68,68,.2); color:var(--red); }
+        .tp-row { display:flex; justify-content:space-between; font-size:9px; padding:1px 0; }
+        .tp-label { color:var(--text-muted); }
+        .tp-val { color:var(--green); font-weight:600; }
+
+        /* Thoughts */
+        .thought { padding:6px 12px; border-bottom:1px solid rgba(42,58,78,.4); font-size:10px; line-height:1.5; }
+        .th-time { color:var(--text-muted); margin-right:6px; }
+        .th-inst { color:var(--cyan); font-weight:600; margin-right:4px; }
+        .th-text { color:var(--text-secondary); }
+        .th-signal { color:var(--green); font-weight:600; }
+        .th-bias { color:var(--yellow); font-weight:600; }
+        .th-bad { color:var(--red); font-weight:600; }
+
+        /* Analysis */
+        .analysis { padding:10px 14px; }
+        .a-section { margin-bottom:14px; }
+        .a-title { font-size:10px; color:var(--cyan); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; padding-bottom:3px; border-bottom:1px solid var(--border); }
+        .a-row { display:flex; justify-content:space-between; padding:2px 0; font-size:10px; }
+        .a-name { color:var(--text-muted); }
+        .a-val { color:var(--text-primary); font-weight:600; }
+
+        .no-data { text-align:center; padding:30px 16px; color:var(--text-muted); font-size:11px; }
+        .bottom { grid-column:1/-1; background:var(--bg-secondary); border-top:1px solid var(--border); padding:6px 14px; display:flex; justify-content:space-between; font-size:10px; color:var(--text-muted); }
+        ::-webkit-scrollbar { width:5px; }
+        ::-webkit-scrollbar-track { background:var(--bg-secondary); }
+        ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-title">AI FUTURES TRADING AGENT</div>
+    <div class="header-right">
+        <div class="badge badge-sim" id="modeBadge">LOADING</div>
+        <div class="badge badge-inactive" id="sessBadge">--</div>
+        <div class="clock" id="clock">--:--:-- PST</div>
+    </div>
+</div>
+
+<div class="main">
+    <div class="tickers">
+        <div class="ticker">
+            <div><div class="ticker-name">Gold Futures (GC)</div><div class="ticker-price" id="p-GOLD">---.--</div></div>
+            <div class="ticker-info"><div class="bias-badge bias-neutral" id="b-GOLD">NEUTRAL</div><div id="chg-GOLD" style="font-size:10px;margin-top:3px">--</div></div>
+        </div>
+        <div class="ticker">
+            <div><div class="ticker-name">NQ Futures (NQ)</div><div class="ticker-price" id="p-NQ">------.--</div></div>
+            <div class="ticker-info"><div class="bias-badge bias-neutral" id="b-NQ">NEUTRAL</div><div id="chg-NQ" style="font-size:10px;margin-top:3px">--</div></div>
+        </div>
+    </div>
+
+    <div class="chart-area">
+        <div class="chart-controls">
+            <label>Inst:</label>
+            <button class="btn active" onclick="setInst('GOLD',this)">GOLD</button>
+            <button class="btn" onclick="setInst('NQ',this)">NQ</button>
+            <span style="color:var(--border)">|</span>
+            <label>TF:</label>
+            <button class="btn" onclick="setTF('1',this)">1m</button>
+            <button class="btn active" onclick="setTF('5',this)">5m</button>
+            <button class="btn" onclick="setTF('15',this)">15m</button>
+            <button class="btn" onclick="setTF('30',this)">30m</button>
+            <button class="btn" onclick="setTF('60',this)">1h</button>
+            <button class="btn" onclick="setTF('240',this)">4h</button>
+            <button class="btn" onclick="setTF('D',this)">1D</button>
+            <button class="btn" onclick="setTF('W',this)">1W</button>
+        </div>
+        <div class="chart-box" id="chartBox"></div>
+    </div>
+
+    <div class="right">
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('signals',this)">Signals</div>
+            <div class="tab" onclick="showTab('thoughts',this)">Agent</div>
+            <div class="tab" onclick="showTab('analysis',this)">Analysis</div>
+        </div>
+        <div class="panel">
+            <div class="section active" id="sec-signals"><div class="no-data" id="sigPlaceholder">Agent scanning for setups...</div></div>
+            <div class="section" id="sec-thoughts"><div id="thoughtsBox"></div></div>
+            <div class="section" id="sec-analysis"><div class="analysis" id="analysisBox"><div class="no-data">Loading analysis...</div></div></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// =============================================
+//  CONFIG
+// =============================================
+const INSTRUMENTS = {
+    GOLD: { symbol: 'GC=F', name: 'Gold Futures', tick: 0.10, pointVal: 100 },
+    NQ:   { symbol: 'NQ=F', name: 'NQ Futures',   tick: 0.25, pointVal: 20 },
+};
+const SESSIONS = [
+    { name: 'Morning Session',   startH: 6, startM: 30, endH: 11, endM: 0 },
+    { name: 'Afternoon Session', startH: 15, startM: 0,  endH: 19, endM: 0 },
+];
+
+let curInst = 'GOLD';
+let curTF = '5';
+let chart, candleSeries, volSeries;
+let entryLine, slLine, tpLines = [];
+let prevPrices = {};
+let allSignals = [];
+let thoughts = [];
+let agentBias = { GOLD: 'neutral', NQ: 'neutral' };
+let analysisCache = {};
+let liveMode = false;
+let priceHistory = { GOLD: {}, NQ: {} };
+let latestPrices = {};
+
+// =============================================
+//  CHART
+// =============================================
+function initChart() {
+    const el = document.getElementById('chartBox');
+    chart = LightweightCharts.createChart(el, {
+        width: el.clientWidth, height: el.clientHeight,
+        layout: { background:{color:'#0a0e17'}, textColor:'#94a3b8', fontSize:10, fontFamily:"'SF Mono',monospace" },
+        grid: { vertLines:{color:'rgba(42,58,78,.3)'}, horzLines:{color:'rgba(42,58,78,.3)'} },
+        crosshair: { mode:LightweightCharts.CrosshairMode.Normal },
+        rightPriceScale: { borderColor:'#2a3a4e', scaleMargins:{top:.1,bottom:.25} },
+        timeScale: { borderColor:'#2a3a4e', timeVisible:true, secondsVisible:false },
+    });
+    candleSeries = chart.addCandlestickSeries({
+        upColor:'#10b981', downColor:'#ef4444', borderUpColor:'#10b981', borderDownColor:'#ef4444',
+        wickUpColor:'#10b981', wickDownColor:'#ef4444',
+    });
+    volSeries = chart.addHistogramSeries({ color:'#3b82f6', priceFormat:{type:'volume'}, priceScaleId:'vol' });
+    chart.priceScale('vol').applyOptions({ scaleMargins:{top:.85,bottom:0} });
+    window.addEventListener('resize', () => { chart.applyOptions({width:el.clientWidth,height:el.clientHeight}); });
+}
+
+function loadChart(data) {
+    if (!data || !data.length) return;
+    candleSeries.setData(data.map(d => ({ time:d.time, open:d.open, high:d.high, low:d.low, close:d.close })));
+    volSeries.setData(data.map(d => ({ time:d.time, value:d.volume||0, color:d.close>=d.open?'rgba(16,185,129,.3)':'rgba(239,68,68,.3)' })));
+    chart.timeScale().fitContent();
+}
+
+function clearLines() {
+    if(entryLine){candleSeries.removePriceLine(entryLine);entryLine=null;}
+    if(slLine){candleSeries.removePriceLine(slLine);slLine=null;}
+    tpLines.forEach(l=>candleSeries.removePriceLine(l)); tpLines=[];
+}
+function drawSignal(sig) {
+    clearLines();
+    entryLine = candleSeries.createPriceLine({price:sig.entry,color:'#3b82f6',lineWidth:2,lineStyle:0,axisLabelVisible:true,title:`ENTRY ${sig.direction}`});
+    slLine = candleSeries.createPriceLine({price:sig.stop_loss,color:'#ef4444',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'SL'});
+    sig.take_profits.forEach((tp,i) => {
+        tpLines.push(candleSeries.createPriceLine({price:tp,color:'#10b981',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:`TP${i+1}`}));
+    });
+}
+
+function setInst(inst, el) {
+    curInst = inst;
+    el.parentElement.querySelectorAll('.btn').forEach(b => { if(b.textContent==='GOLD'||b.textContent==='NQ') b.classList.remove('active'); });
+    el.classList.add('active');
+    clearLines(); fetchChartData(); renderAnalysis();
+}
+function setTF(tf, el) {
+    curTF = tf;
+    document.querySelectorAll('.chart-controls .btn').forEach(b => { if(!['GOLD','NQ'].includes(b.textContent)) b.classList.remove('active'); });
+    el.classList.add('active');
+    clearLines(); fetchChartData();
+}
+function showTab(name, el) {
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    el.classList.add('active');
+    document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+    document.getElementById('sec-'+name).classList.add('active');
+}
+
+// =============================================
+//  DATA FETCHING - Yahoo Finance via public CORS proxies
+// =============================================
+const PROXIES = [
+    'https://query1.finance.yahoo.com',
+    'https://query2.finance.yahoo.com',
+];
+
+async function fetchYahoo(url) {
+    // Try direct Yahoo first
+    for (const base of PROXIES) {
+        try {
+            const r = await fetch(base + url);
+            if (r.ok) { liveMode = true; return await r.json(); }
+        } catch(e) {}
+    }
+    return null;
+}
+
+async function fetchChartData() {
+    const sym = INSTRUMENTS[curInst].symbol;
+    const tfMap = { '1':'1m','5':'5m','15':'15m','30':'30m','60':'60m','240':'60m','D':'1d','W':'1wk' };
+    const rangeMap = { '1':'1d','5':'5d','15':'1mo','30':'1mo','60':'6mo','240':'1y','D':'2y','W':'5y' };
+    const interval = tfMap[curTF] || '5m';
+    const range = rangeMap[curTF] || '5d';
+
+    const data = await fetchYahoo(`/v8/finance/chart/${encodeURIComponent(sym)}?interval=${interval}&range=${range}`);
+
+    if (data && data.chart && data.chart.result && data.chart.result[0]) {
+        const r = data.chart.result[0];
+        const ts = r.timestamp;
+        const q = r.indicators.quote[0];
+        const candles = [];
+        for (let i = 0; i < ts.length; i++) {
+            if (q.open[i]==null) continue;
+            const c = { time:ts[i], open:+q.open[i].toFixed(2), high:+q.high[i].toFixed(2), low:+q.low[i].toFixed(2), close:+q.close[i].toFixed(2), volume:q.volume[i]||0 };
+            candles.push(c);
+        }
+        // For 4h, resample from 1h
+        if (curTF === '240') {
+            const resampled = resample4h(candles);
+            loadChart(resampled);
+            priceHistory[curInst][curTF] = resampled;
+        } else {
+            loadChart(candles);
+            priceHistory[curInst][curTF] = candles;
+        }
+        document.getElementById('modeBadge').textContent = 'LIVE';
+        document.getElementById('modeBadge').className = 'badge badge-active';
+    } else {
+        // Fallback: simulated
+        const candles = generateSimCandles(curInst, parseInt(curTF)||5, 300);
+        loadChart(candles);
+        priceHistory[curInst][curTF] = candles;
+        document.getElementById('modeBadge').textContent = 'SIMULATED';
+        document.getElementById('modeBadge').className = 'badge badge-sim';
+    }
+}
+
+function resample4h(candles) {
+    const groups = {};
+    candles.forEach(c => {
+        const d = new Date(c.time*1000);
+        const block = Math.floor(d.getUTCHours()/4);
+        const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}-${block}`;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(c);
+    });
+    return Object.values(groups).map(g => ({
+        time: g[0].time,
+        open: g[0].open,
+        high: Math.max(...g.map(c=>c.high)),
+        low: Math.min(...g.map(c=>c.low)),
+        close: g[g.length-1].close,
+        volume: g.reduce((s,c)=>s+c.volume,0),
+    }));
+}
+
+// =============================================
+//  LIVE PRICE POLLING
+// =============================================
+async function pollPrices() {
+    for (const [inst, cfg] of Object.entries(INSTRUMENTS)) {
+        try {
+            const data = await fetchYahoo(`/v8/finance/chart/${encodeURIComponent(cfg.symbol)}?interval=1m&range=1d`);
+            if (data && data.chart && data.chart.result) {
+                const r = data.chart.result[0];
+                const q = r.indicators.quote[0];
+                const meta = r.meta;
+                const price = meta.regularMarketPrice || q.close[q.close.length-1];
+                if (price) {
+                    const prev = latestPrices[inst] || price;
+                    latestPrices[inst] = price;
+                    updateTicker(inst, price, prev);
+
+                    // Store for analysis
+                    const ts = r.timestamp;
+                    const candles = [];
+                    for (let i = 0; i < ts.length; i++) {
+                        if (q.open[i]==null) continue;
+                        candles.push({ time:ts[i], open:+q.open[i].toFixed(2), high:+q.high[i].toFixed(2), low:+q.low[i].toFixed(2), close:+q.close[i].toFixed(2), volume:q.volume[i]||0 });
+                    }
+                    priceHistory[inst]['1'] = candles;
+                    liveMode = true;
+                }
+            }
+        } catch(e) {}
+    }
+
+    if (!liveMode) simulatePrices();
+}
+
+// =============================================
+//  SIMULATED DATA FALLBACK
+// =============================================
+let simPrices = { GOLD: 3015.40, NQ: 19875.50 };
+let simTrend = { GOLD: 0, NQ: 0 };
+let simTrendDur = { GOLD: 0, NQ: 0 };
+
+function simulatePrices() {
+    for (const inst of ['GOLD','NQ']) {
+        const vol = inst==='GOLD' ? 0.80 : 5.0;
+        simTrendDur[inst]--;
+        if (simTrendDur[inst] <= 0) {
+            simTrend[inst] = (Math.random()-.5) * vol * 0.6;
+            simTrendDur[inst] = 10 + Math.floor(Math.random()*100);
+        }
+        const noise = (Math.random()-.5)*2*vol;
+        simPrices[inst] += simTrend[inst]*0.1 + noise;
+        const tick = INSTRUMENTS[inst].tick;
+        simPrices[inst] = Math.round(simPrices[inst]/tick)*tick;
+        simPrices[inst] = +simPrices[inst].toFixed(2);
+
+        const prev = latestPrices[inst] || simPrices[inst];
+        latestPrices[inst] = simPrices[inst];
+        updateTicker(inst, simPrices[inst], prev);
+    }
+}
+
+function generateSimCandles(inst, intervalMin, count) {
+    let price = simPrices[inst] || (inst==='GOLD'?3015:19875);
+    const vol = (inst==='GOLD'?0.8:5) * Math.sqrt(Math.min(intervalMin,60)) * 0.5;
+    const now = Math.floor(Date.now()/1000);
+    const candles = [];
+    let bias = (Math.random()-.5)*vol*0.02;
+    // Build backwards
+    let p = price - (Math.random()-.5)*vol*count*0.01;
+    for (let i = 0; i < count; i++) {
+        const t = now - (count-i)*intervalMin*60;
+        const o = p;
+        const moves = [(Math.random()-.5)*vol*2,(Math.random()-.5)*vol*2,(Math.random()-.5)*vol*2,(Math.random()-.5)*vol*2];
+        const c = o + moves.reduce((a,b)=>a+b,0)*0.5 + bias;
+        const h = Math.max(o,c) + Math.abs((Math.random())*vol);
+        const l = Math.min(o,c) - Math.abs((Math.random())*vol);
+        const tick = INSTRUMENTS[inst].tick;
+        candles.push({
+            time: t,
+            open: +(Math.round(o/tick)*tick).toFixed(2),
+            high: +(Math.round(h/tick)*tick).toFixed(2),
+            low: +(Math.round(l/tick)*tick).toFixed(2),
+            close: +(Math.round(c/tick)*tick).toFixed(2),
+            volume: Math.floor(Math.random()*5000+500),
+        });
+        p = c;
+        bias += (Math.random()-.5)*vol*0.005;
+    }
+    return candles;
+}
+
+function updateTicker(inst, price, prev) {
+    const el = document.getElementById('p-'+inst);
+    el.textContent = price.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+    el.className = 'ticker-price '+(price>prev?'price-up':price<prev?'price-down':'');
+    el.classList.add('flash');
+    setTimeout(()=>el.classList.remove('flash'),300);
+    const diff = price - prev;
+    const chg = document.getElementById('chg-'+inst);
+    if(diff!==0) { chg.textContent=(diff>0?'+':'')+diff.toFixed(2); chg.style.color=diff>0?'var(--green)':'var(--red)'; }
+}
+
+// =============================================
+//  TECHNICAL ANALYSIS ENGINE
+// =============================================
+function calcEMA(data, period) {
+    const k = 2/(period+1);
+    let ema = data[0];
+    const result = [ema];
+    for (let i=1;i<data.length;i++) { ema = data[i]*k + ema*(1-k); result.push(ema); }
+    return result;
+}
+function calcSMA(data, period) {
+    const result = [];
+    for (let i=0;i<data.length;i++) {
+        if (i<period-1) { result.push(null); continue; }
+        let sum=0; for(let j=i-period+1;j<=i;j++) sum+=data[j];
+        result.push(sum/period);
+    }
+    return result;
+}
+function calcRSI(closes, period=14) {
+    if (closes.length < period+1) return null;
+    let gains=0, losses=0;
+    for (let i=closes.length-period; i<closes.length; i++) {
+        const d = closes[i]-closes[i-1];
+        if(d>0) gains+=d; else losses-=d;
+    }
+    const ag = gains/period, al = losses/period;
+    if(al===0) return 100;
+    return 100 - 100/(1+ag/al);
+}
+function calcATR(candles, period=14) {
+    if (candles.length < period+1) return null;
+    let sum=0;
+    for (let i=candles.length-period; i<candles.length; i++) {
+        const tr = Math.max(candles[i].high-candles[i].low, Math.abs(candles[i].high-candles[i-1].close), Math.abs(candles[i].low-candles[i-1].close));
+        sum+=tr;
+    }
+    return sum/period;
+}
+function calcMACD(closes) {
+    if(closes.length<26) return null;
+    const ema12=calcEMA(closes,12), ema26=calcEMA(closes,26);
+    const macdLine = ema12.map((v,i)=>v-ema26[i]);
+    const signal = calcEMA(macdLine.slice(-9),9);
+    const hist = macdLine[macdLine.length-1] - signal[signal.length-1];
+    return { line:macdLine[macdLine.length-1], signal:signal[signal.length-1], histogram:hist };
+}
+function calcStoch(candles, period=14) {
+    if(candles.length<period) return null;
+    const slice = candles.slice(-period);
+    const hh = Math.max(...slice.map(c=>c.high));
+    const ll = Math.min(...slice.map(c=>c.low));
+    if(hh===ll) return {k:50,d:50};
+    const k = (candles[candles.length-1].close-ll)/(hh-ll)*100;
+    return {k, d:k}; // simplified
+}
+function calcBB(closes, period=20) {
+    if(closes.length<period) return null;
+    const slice = closes.slice(-period);
+    const mean = slice.reduce((a,b)=>a+b,0)/period;
+    const std = Math.sqrt(slice.reduce((s,v)=>s+(v-mean)**2,0)/period);
+    return { upper:mean+2*std, middle:mean, lower:mean-2*std, width:(4*std)/mean };
+}
+
+function analyzeInstrument(inst) {
+    // Gather data from all available timeframes
+    const result = {};
+    const candles = priceHistory[inst];
+    if (!candles) return result;
+
+    // Analyze each available timeframe
+    for (const [tf, data] of Object.entries(candles)) {
+        if (!data || data.length < 20) continue;
+        const closes = data.map(c=>c.close);
+        const highs = data.map(c=>c.high);
+        const lows = data.map(c=>c.low);
+        const last = closes[closes.length-1];
+
+        const ema9 = calcEMA(closes,9);
+        const ema20 = calcEMA(closes,20);
+        const ema50 = calcEMA(closes, Math.min(50, closes.length));
+        const rsi = calcRSI(closes);
+        const atr = calcATR(data);
+        const macd = calcMACD(closes);
+        const stoch = calcStoch(data);
+        const bb = calcBB(closes);
+
+        // Trend score
+        let trendScore = 50;
+        if(ema9[ema9.length-1]>ema20[ema20.length-1]) trendScore+=15; else trendScore-=15;
+        if(last>ema20[ema20.length-1]) trendScore+=10; else trendScore-=10;
+        if(macd && macd.histogram>0) trendScore+=10; else if(macd) trendScore-=10;
+        trendScore = Math.max(0,Math.min(100,trendScore));
+
+        const trendDir = trendScore>60?'bullish':trendScore<40?'bearish':'neutral';
+        const trendStr = Math.abs(trendScore-50)>30?'strong':Math.abs(trendScore-50)>15?'moderate':'weak';
+
+        // S/R (swing point detection)
+        const supports = [], resistances = [];
+        for (let i=2;i<data.length-2;i++) {
+            if(lows[i]<lows[i-1]&&lows[i]<lows[i+1]&&lows[i]<lows[i-2]&&lows[i]<lows[i+2]) {
+                if(lows[i]<last) supports.push(+lows[i].toFixed(2));
+            }
+            if(highs[i]>highs[i-1]&&highs[i]>highs[i+1]&&highs[i]>highs[i-2]&&highs[i]>highs[i+2]) {
+                if(highs[i]>last) resistances.push(+highs[i].toFixed(2));
+            }
+        }
+        supports.sort((a,b)=>b-a);
+        resistances.sort((a,b)=>a-b);
+
+        // Patterns
+        const patterns = detectPatterns(data);
+
+        // Structure
+        const swingHighs = [], swingLows = [];
+        const lookback = Math.min(20, data.length);
+        const hSlice = highs.slice(-lookback), lSlice = lows.slice(-lookback);
+        for(let i=2;i<hSlice.length-2;i++){
+            if(hSlice[i]>hSlice[i-1]&&hSlice[i]>hSlice[i+1]) swingHighs.push(hSlice[i]);
+            if(lSlice[i]<lSlice[i-1]&&lSlice[i]<lSlice[i+1]) swingLows.push(lSlice[i]);
+        }
+        let structure = 'ranging';
+        if(swingHighs.length>=2&&swingLows.length>=2) {
+            const hh=swingHighs[swingHighs.length-1]>swingHighs[swingHighs.length-2];
+            const hl=swingLows[swingLows.length-1]>swingLows[swingLows.length-2];
+            const lh=swingHighs[swingHighs.length-1]<swingHighs[swingHighs.length-2];
+            const ll=swingLows[swingLows.length-1]<swingLows[swingLows.length-2];
+            if(hh&&hl) structure='uptrend';
+            else if(lh&&ll) structure='downtrend';
+            else if(lh&&hl) structure='compression';
+        }
+
+        result[tf] = {
+            trend: { direction:trendDir, score:trendScore, strength:trendStr },
+            indicators: {
+                ema_9: +ema9[ema9.length-1].toFixed(2),
+                ema_20: +ema20[ema20.length-1].toFixed(2),
+                ema_50: +ema50[ema50.length-1].toFixed(2),
+                rsi_14: rsi?+rsi.toFixed(1):null,
+                atr_14: atr?+atr.toFixed(2):null,
+                macd_histogram: macd?+macd.histogram.toFixed(2):null,
+                stoch_k: stoch?+stoch.k.toFixed(1):null,
+                bb_upper: bb?+bb.upper.toFixed(2):null,
+                bb_lower: bb?+bb.lower.toFixed(2):null,
+                bb_width: bb?+bb.width.toFixed(4):null,
+            },
+            structure,
+            supports: supports.slice(0,3),
+            resistances: resistances.slice(0,3),
+            patterns,
+            swingHighs: swingHighs.slice(-3),
+            swingLows: swingLows.slice(-3),
+        };
+    }
+    return result;
+}
+
+function detectPatterns(data) {
+    const patterns = [];
+    if(data.length<3) return patterns;
+    const o=data.map(c=>c.open), c=data.map(c=>c.close), h=data.map(c=>c.high), l=data.map(c=>c.low);
+    const n=data.length-1;
+    // Engulfing
+    if(c[n]>o[n]&&c[n-1]<o[n-1]&&c[n]>o[n-1]&&o[n]<c[n-1]) patterns.push({name:'Bullish Engulfing',bias:'bullish',strength:75});
+    if(c[n]<o[n]&&c[n-1]>o[n-1]&&c[n]<o[n-1]&&o[n]>c[n-1]) patterns.push({name:'Bearish Engulfing',bias:'bearish',strength:75});
+    // Hammer / Shooting Star
+    const body=Math.abs(c[n]-o[n]), range=h[n]-l[n];
+    if(range>0){
+        const lw=Math.min(o[n],c[n])-l[n], uw=h[n]-Math.max(o[n],c[n]);
+        if(lw>2*body&&uw<body) patterns.push({name:'Hammer',bias:'bullish',strength:70});
+        if(uw>2*body&&lw<body) patterns.push({name:'Shooting Star',bias:'bearish',strength:70});
+    }
+    // Doji
+    if(range>0&&body/range<0.1) patterns.push({name:'Doji',bias:'neutral',strength:50});
+    return patterns;
+}
+
+// =============================================
+//  AI TRADING AGENT
+// =============================================
+function agentThink(inst, text) {
+    const now = new Date().toLocaleTimeString('en-US',{timeZone:'America/Los_Angeles',hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const entry = { time:now, inst, text };
+    thoughts.unshift(entry);
+    if(thoughts.length>200) thoughts.pop();
+    renderThoughts();
+}
+
+function runAgent() {
+    const inSess = isInSession();
+    const sessName = inSess ? getSessionName() : null;
+    const sessBadge = document.getElementById('sessBadge');
+
+    if (inSess) {
+        sessBadge.textContent = sessName;
+        sessBadge.className = 'badge badge-active';
+    } else {
+        sessBadge.textContent = 'OFF SESSION';
+        sessBadge.className = 'badge badge-inactive';
+    }
+
+    // Always run in demo/sim mode; in live only during sessions
+    if (!inSess && liveMode) {
+        agentThink('SYSTEM', 'Outside trading hours. Sessions: 6:30-11:00 AM & 3:00-7:00 PM PST.');
+        return;
+    }
+
+    for (const inst of ['GOLD','NQ']) {
+        agentThink(inst, `--- Analyzing ${inst} [${sessName||'Active'}] ---`);
+
+        const analysis = analyzeInstrument(inst);
+        analysisCache[inst] = analysis;
+
+        if (!Object.keys(analysis).length) {
+            agentThink(inst, 'Insufficient data for analysis.');
+            continue;
+        }
+
+        // Determine HTF bias
+        let biasScore = 50;
+        const weights = { 'D':3, 'W':2, '240':2, '60':1.5, '30':1 };
+        let totalW = 0;
+        for (const [tf, w] of Object.entries(weights)) {
+            if (analysis[tf]) {
+                biasScore += (analysis[tf].trend.score - 50) * w;
+                totalW += w;
+            }
+        }
+        if (totalW > 0) biasScore = 50 + (biasScore-50)/totalW;
+        biasScore = Math.max(0,Math.min(100,biasScore));
+
+        const newBias = biasScore>60?'bullish':biasScore<40?'bearish':'neutral';
+        const oldBias = agentBias[inst];
+
+        if (newBias !== oldBias) {
+            agentThink(inst, `BIAS SHIFT: ${oldBias.toUpperCase()} -> ${newBias.toUpperCase()} at ${latestPrices[inst]}`);
+            // Invalidate conflicting signals
+            allSignals.forEach(s => {
+                if (s.instrument===inst && s.status==='ACTIVE') {
+                    if ((newBias==='bearish'&&s.direction==='LONG')||(newBias==='bullish'&&s.direction==='SHORT')) {
+                        s.status = 'INVALIDATED';
+                        s.reasoning.push(`INVALIDATED: Bias shifted to ${newBias}`);
+                        agentThink(inst, `INVALIDATED ${s.direction} signal due to bias shift`);
+                    }
+                }
+            });
+        }
+        agentBias[inst] = newBias;
+
+        const bEl = document.getElementById('b-'+inst);
+        bEl.textContent = newBias.toUpperCase();
+        bEl.className = 'bias-badge bias-'+newBias;
+
+        agentThink(inst, `HTF Bias: ${newBias.toUpperCase()} (score: ${biasScore.toFixed(1)})`);
+
+        // Scan for setups
+        const price = latestPrices[inst];
+        if (!price) continue;
+
+        const setups = scanSetups(inst, analysis, price, newBias);
+
+        // Filter and generate signals
+        const hasActive = allSignals.some(s => s.instrument===inst && s.status==='ACTIVE');
+        if (!hasActive) {
+            const best = setups.filter(s => s.confidence >= 70 && s.rr >= 1.5).sort((a,b)=>b.confidence-a.confidence)[0];
+            if (best) {
+                const sig = {
+                    instrument: inst, direction: best.direction, entry: +best.entry.toFixed(2),
+                    stop_loss: +best.sl.toFixed(2),
+                    take_profits: best.tps.map(t=>+t.toFixed(2)),
+                    confidence: best.confidence, reasoning: best.reasons, setup_type: best.type,
+                    timeframe: best.tf, bias: newBias,
+                    timestamp: new Date().toLocaleTimeString('en-US',{timeZone:'America/Los_Angeles'}),
+                    status: 'ACTIVE', risk_reward: +best.rr.toFixed(2),
+                };
+                allSignals.unshift(sig);
+                agentThink(inst, `NEW SIGNAL: ${sig.direction} ${inst} @ ${sig.entry} | SL: ${sig.stop_loss} | TP1: ${sig.take_profits[0]} | R:R: ${sig.risk_reward} | Conf: ${sig.confidence}%`);
+                if (inst===curInst) drawSignal(sig);
+                renderSignals();
+                document.title = `[${sig.direction}] ${inst} @ ${sig.entry} | AI Trading Agent`;
+                setTimeout(()=>{document.title='AI Futures Trading Agent';},5000);
+            } else {
+                agentThink(inst, setups.length ? `Found ${setups.length} setups but none qualify (need 70% conf + 1.5 R:R)` : 'No qualifying setups. Waiting for better PA...');
+            }
+        }
+
+        // Manage active signals
+        allSignals.forEach(s => {
+            if (s.instrument!==inst || s.status!=='ACTIVE') return;
+            if (s.direction==='LONG' && price<=s.stop_loss) { s.status='HIT_SL'; agentThink(inst,`STOP LOSS HIT @ ${price}`); }
+            if (s.direction==='SHORT' && price>=s.stop_loss) { s.status='HIT_SL'; agentThink(inst,`STOP LOSS HIT @ ${price}`); }
+            for (let i=0;i<s.take_profits.length;i++) {
+                if(s.direction==='LONG'&&price>=s.take_profits[i]){ s.status=`HIT_TP${i+1}`; agentThink(inst,`TP${i+1} HIT @ ${price}`); break; }
+                if(s.direction==='SHORT'&&price<=s.take_profits[i]){ s.status=`HIT_TP${i+1}`; agentThink(inst,`TP${i+1} HIT @ ${price}`); break; }
+            }
+        });
+        renderSignals();
+    }
+    renderAnalysis();
+}
+
+function scanSetups(inst, analysis, price, bias) {
+    const setups = [];
+    const entryTFs = ['5','15','1','30'];
+
+    for (const tf of entryTFs) {
+        const a = analysis[tf];
+        if (!a) continue;
+        const ind = a.indicators;
+        const atr = ind.atr_14;
+        const rsi = ind.rsi_14;
+        if(!atr) continue;
+
+        // Setup 1: EMA Pullback
+        if (bias==='bullish' && ind.ema_20>ind.ema_50) {
+            if (Math.abs(price-ind.ema_20)<atr*0.5 && price>=ind.ema_20*0.998 && rsi>40 && rsi<65) {
+                const sl = ind.ema_50 - atr*0.3;
+                const risk = price-sl;
+                if(risk>0) setups.push({ type:'EMA Pullback Long', tf, direction:'LONG', entry:price, sl, tps:[price+risk*1.5, price+risk*2.5, price+risk*3.5], confidence:scoreSetup(analysis,'bullish',tf), rr:(risk*1.5)/risk, reasons:['Bullish HTF bias',`EMA pullback on ${tf}m`,'EMAs stacked bullish',`RSI ${rsi.toFixed(0)} - room to run`] });
+            }
+        }
+        if (bias==='bearish' && ind.ema_20<ind.ema_50) {
+            if (Math.abs(price-ind.ema_20)<atr*0.5 && price<=ind.ema_20*1.002 && rsi<60 && rsi>35) {
+                const sl = ind.ema_50 + atr*0.3;
+                const risk = sl-price;
+                if(risk>0) setups.push({ type:'EMA Pullback Short', tf, direction:'SHORT', entry:price, sl, tps:[price-risk*1.5, price-risk*2.5, price-risk*3.5], confidence:scoreSetup(analysis,'bearish',tf), rr:(risk*1.5)/risk, reasons:['Bearish HTF bias',`EMA pullback on ${tf}m`,'EMAs stacked bearish',`RSI ${rsi.toFixed(0)} - room to fall`] });
+            }
+        }
+
+        // Setup 2: S/R Bounce
+        const sups = a.supports||[], ress = a.resistances||[];
+        for (const s of sups.slice(0,2)) {
+            if (atr>0 && Math.abs(price-s)<atr*0.4) {
+                const bullPat = (a.patterns||[]).filter(p=>p.bias==='bullish');
+                if (bullPat.length || rsi<35) {
+                    const sl=s-atr*0.8; const risk=price-sl;
+                    if(risk>0) setups.push({ type:'Support Bounce Long', tf, direction:'LONG', entry:price, sl, tps:[price+risk*2, price+risk*3], confidence:scoreSetup(analysis,'bullish',tf)+5, rr:2, reasons:[`Price at support ${s.toFixed(2)}`,bullPat.length?`Patterns: ${bullPat.map(p=>p.name).join(', ')}`:'Oversold RSI at support'] });
+                }
+            }
+        }
+        for (const r of ress.slice(0,2)) {
+            if (atr>0 && Math.abs(price-r)<atr*0.4) {
+                const bearPat = (a.patterns||[]).filter(p=>p.bias==='bearish');
+                if (bearPat.length || rsi>65) {
+                    const sl=r+atr*0.8; const risk=sl-price;
+                    if(risk>0) setups.push({ type:'Resistance Rejection Short', tf, direction:'SHORT', entry:price, sl, tps:[price-risk*2, price-risk*3], confidence:scoreSetup(analysis,'bearish',tf)+5, rr:2, reasons:[`Price at resistance ${r.toFixed(2)}`,bearPat.length?`Patterns: ${bearPat.map(p=>p.name).join(', ')}`:'Overbought RSI at resistance'] });
+                }
+            }
+        }
+
+        // Setup 3: BB Squeeze Breakout
+        if (ind.bb_width && ind.bb_width<0.02 && atr>0) {
+            if (price>ind.bb_upper && ind.macd_histogram>0) {
+                const sl=ind.bb_lower; const risk=price-sl;
+                if(risk>0) setups.push({ type:'Squeeze Breakout Long', tf, direction:'LONG', entry:price, sl, tps:[price+atr*3,price+atr*5], confidence:scoreSetup(analysis,'bullish',tf), rr:(atr*3)/risk, reasons:['Bollinger squeeze breakout',`Price above upper band`,`MACD positive`] });
+            }
+            if (price<ind.bb_lower && ind.macd_histogram<0) {
+                const sl=ind.bb_upper; const risk=sl-price;
+                if(risk>0) setups.push({ type:'Squeeze Breakout Short', tf, direction:'SHORT', entry:price, sl, tps:[price-atr*3,price-atr*5], confidence:scoreSetup(analysis,'bearish',tf), rr:(atr*3)/risk, reasons:['Bollinger squeeze breakout',`Price below lower band`,`MACD negative`] });
+            }
+        }
+
+        // Setup 4: Divergence
+        if (a.swingLows && a.swingLows.length>=2) {
+            if (a.swingLows[a.swingLows.length-1]<a.swingLows[a.swingLows.length-2] && rsi>30 && rsi<45 && ind.macd_histogram>0) {
+                const sl=a.swingLows[a.swingLows.length-1]-atr*0.3; const risk=price-sl;
+                if(risk>0) setups.push({ type:'Bullish Divergence', tf, direction:'LONG', entry:price, sl, tps:[price+risk*2,price+risk*3], confidence:scoreSetup(analysis,'bullish',tf), rr:2, reasons:['Bullish RSI divergence',`RSI ${rsi.toFixed(0)} higher while price lower`,'MACD turning positive'] });
+            }
+        }
+        if (a.swingHighs && a.swingHighs.length>=2) {
+            if (a.swingHighs[a.swingHighs.length-1]>a.swingHighs[a.swingHighs.length-2] && rsi>55 && rsi<70 && ind.macd_histogram<0) {
+                const sl=a.swingHighs[a.swingHighs.length-1]+atr*0.3; const risk=sl-price;
+                if(risk>0) setups.push({ type:'Bearish Divergence', tf, direction:'SHORT', entry:price, sl, tps:[price-risk*2,price-risk*3], confidence:scoreSetup(analysis,'bearish',tf), rr:2, reasons:['Bearish RSI divergence',`RSI ${rsi.toFixed(0)} lower while price higher`,'MACD turning negative'] });
+            }
+        }
+    }
+    return setups;
+}
+
+function scoreSetup(analysis, direction, primaryTF) {
+    let score = 50;
+    const htfs = ['D','W','240','60'];
+    for (const tf of htfs) {
+        if (analysis[tf] && tf!==primaryTF) {
+            if(analysis[tf].trend.direction===direction) score+=8;
+            else if(analysis[tf].trend.direction==='neutral') score+=2;
+            else score-=5;
+        }
+    }
+    if (analysis[primaryTF]) {
+        const p = analysis[primaryTF].patterns||[];
+        p.forEach(pat => { if(pat.bias===direction) score+=pat.strength*0.15; else if(pat.bias!=='neutral') score-=3; });
+        if(analysis[primaryTF].structure==='uptrend'&&direction==='bullish') score+=10;
+        if(analysis[primaryTF].structure==='downtrend'&&direction==='bearish') score+=10;
+    }
+    return Math.max(0,Math.min(100,Math.round(score)));
+}
+
+// =============================================
+//  RENDERING
+// =============================================
+function renderSignals() {
+    const el = document.getElementById('sec-signals');
+    if (!allSignals.length) { el.innerHTML='<div class="no-data">Agent scanning for setups...</div>'; return; }
+    el.innerHTML = allSignals.map(s => {
+        const isLong = s.direction==='LONG';
+        const stCls = s.status==='ACTIVE'?'st-active':s.status==='INVALIDATED'?'st-invalid':s.status.startsWith('HIT_TP')?'st-tp':'st-sl';
+        const tpHtml = s.take_profits.map((tp,i)=>`<div class="tp-row"><span class="tp-label">TP${i+1}</span><span class="tp-val">${tp.toFixed(2)}</span></div>`).join('');
+        return `<div class="signal">
+            <div class="sig-header"><div style="display:flex;gap:6px;align-items:center"><span class="sig-dir ${isLong?'sig-long':'sig-short'}">${s.direction} ${s.instrument}</span><span class="rr">R:R ${s.risk_reward}</span></div><span class="sig-status ${stCls}">${s.status}</span></div>
+            <div class="sig-setup">${s.setup_type} (${s.timeframe}m)</div>
+            <div class="sig-levels"><div class="sig-lv"><div class="sig-lv-label">Entry</div><div class="sig-lv-val sig-entry">${s.entry.toFixed(2)}</div></div><div class="sig-lv"><div class="sig-lv-label">Stop Loss</div><div class="sig-lv-val sig-sl">${s.stop_loss.toFixed(2)}</div></div><div class="sig-lv"><div class="sig-lv-label">TP1</div><div class="sig-lv-val sig-tp">${s.take_profits[0]?s.take_profits[0].toFixed(2):'--'}</div></div></div>
+            ${tpHtml}
+            <div class="sig-reasons">${s.reasoning.map(r=>'- '+r).join('<br>')}</div>
+            <div class="sig-meta">Conf: ${s.confidence}% | Bias: ${s.bias} | ${s.timestamp}</div>
+        </div>`;
+    }).join('');
+}
+
+function renderThoughts() {
+    const el = document.getElementById('thoughtsBox');
+    el.innerHTML = thoughts.slice(0,150).map(t => {
+        let cls='th-text';
+        if(t.text.includes('NEW SIGNAL')) cls='th-signal';
+        else if(t.text.includes('BIAS SHIFT')) cls='th-bias';
+        else if(t.text.includes('INVALIDATED')||t.text.includes('STOP LOSS')||t.text.includes('HIT')) cls='th-bad';
+        return `<div class="thought"><span class="th-time">${t.time}</span><span class="th-inst">[${t.inst}]</span><span class="${cls}">${t.text}</span></div>`;
+    }).join('');
+}
+
+function renderAnalysis() {
+    const data = analysisCache[curInst];
+    const el = document.getElementById('analysisBox');
+    if (!data || !Object.keys(data).length) { el.innerHTML='<div class="no-data">Waiting for analysis...</div>'; return; }
+
+    const tfOrder = ['D','W','240','60','30','15','5','1'];
+    const tfNames = {'D':'Daily','W':'Weekly','240':'4H','60':'1H','30':'30m','15':'15m','5':'5m','1':'1m'};
+    let html = '';
+    tfOrder.forEach(tf => {
+        const a = data[tf];
+        if (!a) return;
+        html += `<div class="a-section"><div class="a-title">${tfNames[tf]||tf}</div>`;
+        if(a.trend) html+=`<div class="a-row"><span class="a-name">Trend</span><span class="a-val" style="color:${a.trend.direction==='bullish'?'var(--green)':a.trend.direction==='bearish'?'var(--red)':'var(--yellow)'}">${a.trend.direction.toUpperCase()} (${a.trend.strength})</span></div>`;
+        if(a.structure) html+=`<div class="a-row"><span class="a-name">Structure</span><span class="a-val">${a.structure.toUpperCase()}</span></div>`;
+        const keys=['rsi_14','macd_histogram','atr_14','ema_9','ema_20','ema_50','stoch_k','bb_width'];
+        keys.forEach(k => { if(a.indicators[k]!=null) html+=`<div class="a-row"><span class="a-name">${k.replace(/_/g,' ').toUpperCase()}</span><span class="a-val">${a.indicators[k]}</span></div>`; });
+        if(a.supports&&a.supports.length) html+=`<div class="a-row"><span class="a-name">Supports</span><span class="a-val" style="color:var(--green)">${a.supports.map(s=>s.toFixed(2)).join(', ')}</span></div>`;
+        if(a.resistances&&a.resistances.length) html+=`<div class="a-row"><span class="a-name">Resistances</span><span class="a-val" style="color:var(--red)">${a.resistances.map(r=>r.toFixed(2)).join(', ')}</span></div>`;
+        if(a.patterns&&a.patterns.length) a.patterns.forEach(p => { html+=`<div class="a-row"><span class="a-name">${p.name}</span><span class="a-val" style="color:${p.bias==='bullish'?'var(--green)':p.bias==='bearish'?'var(--red)':'var(--yellow)'}">${p.bias.toUpperCase()}</span></div>`; });
+        html += '</div>';
+    });
+    el.innerHTML = html;
+}
+
+// =============================================
+//  SESSION & CLOCK
+// =============================================
+function getPSTNow() {
+    return new Date(new Date().toLocaleString('en-US',{timeZone:'America/Los_Angeles'}));
+}
+function isInSession() {
+    const now = getPSTNow();
+    const mins = now.getHours()*60+now.getMinutes();
+    return (mins>=390&&mins<=660)||(mins>=900&&mins<=1140);
+}
+function getSessionName() {
+    const now = getPSTNow();
+    const mins = now.getHours()*60+now.getMinutes();
+    if(mins>=390&&mins<=660) return 'Morning Session';
+    if(mins>=900&&mins<=1140) return 'Afternoon Session';
+    return null;
+}
+function updateClock() {
+    const now = getPSTNow();
+    document.getElementById('clock').textContent = now.toLocaleTimeString('en-US',{hour12:true})+' PST';
+}
+
+// =============================================
+//  MAIN LOOP
+// =============================================
+async function init() {
+    initChart();
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // Initial data load
+    await fetchChartData();
+    await pollPrices();
+
+    // Also load other timeframes for analysis
+    for (const inst of ['GOLD','NQ']) {
+        for (const tf of ['1','5','15','30','60','240','D','W']) {
+            const sym = INSTRUMENTS[inst].symbol;
+            const tfMap = {'1':'1m','5':'5m','15':'15m','30':'30m','60':'60m','240':'60m','D':'1d','W':'1wk'};
+            const rangeMap = {'1':'1d','5':'5d','15':'1mo','30':'1mo','60':'6mo','240':'1y','D':'2y','W':'5y'};
+            try {
+                const data = await fetchYahoo(`/v8/finance/chart/${encodeURIComponent(sym)}?interval=${tfMap[tf]}&range=${rangeMap[tf]}`);
+                if (data&&data.chart&&data.chart.result) {
+                    const r=data.chart.result[0], q=r.indicators.quote[0], ts=r.timestamp;
+                    const candles=[];
+                    for(let i=0;i<ts.length;i++){ if(q.open[i]==null)continue; candles.push({time:ts[i],open:+q.open[i].toFixed(2),high:+q.high[i].toFixed(2),low:+q.low[i].toFixed(2),close:+q.close[i].toFixed(2),volume:q.volume[i]||0}); }
+                    if(tf==='240') priceHistory[inst][tf]=resample4h(candles);
+                    else priceHistory[inst][tf]=candles;
+                }
+            } catch(e){}
+        }
+        // Sim fallback
+        if (!Object.keys(priceHistory[inst]).length || Object.values(priceHistory[inst]).every(v=>!v||!v.length)) {
+            for (const tf of ['1','5','15','30','60','240']) {
+                priceHistory[inst][tf] = generateSimCandles(inst, parseInt(tf)||5, 300);
+            }
+            priceHistory[inst]['D'] = generateSimCandles(inst, 1440, 500);
+            priceHistory[inst]['W'] = generateSimCandles(inst, 10080, 200);
+        }
+    }
+
+    // First agent run
+    runAgent();
+
+    // Price poll every 1s
+    setInterval(pollPrices, 1000);
+    // Agent runs every 5s
+    setInterval(runAgent, 5000);
+    // Refresh chart every 30s
+    setInterval(fetchChartData, 30000);
+}
+
+window.addEventListener('load', init);
+</script>
+</body>
+</html>
