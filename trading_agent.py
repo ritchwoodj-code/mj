@@ -90,8 +90,9 @@ class TradingAgent:
     - Patience > frequency: only take A+ setups
     """
 
-    def __init__(self, market_data_service):
+    def __init__(self, market_data_service, demo_mode=False):
         self.mds = market_data_service
+        self.demo_mode = demo_mode  # If True, analyze regardless of session time
         self.analyzer = TechnicalAnalyzer()
         self._running = False
         self._bias = {}               # {instrument: "bullish"/"bearish"/"neutral"}
@@ -169,9 +170,10 @@ class TradingAgent:
         while self._running:
             try:
                 in_session, session_name = self.is_trading_session()
-                if in_session:
+                if in_session or self.demo_mode:
+                    session_label = session_name or "Demo Mode"
                     for inst_key in INSTRUMENTS:
-                        self._full_analysis(inst_key, session_name)
+                        self._full_analysis(inst_key, session_label)
                 else:
                     now = datetime.now(PST)
                     self._emit_thought("SYSTEM",
