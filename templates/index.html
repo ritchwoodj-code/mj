@@ -468,6 +468,7 @@
 <div class="header">
     <div class="header-title">AI FUTURES TRADING AGENT</div>
     <div class="header-status">
+        <div id="dataMode" class="session-badge session-inactive" style="font-size:10px">--</div>
         <div id="sessionBadge" class="session-badge session-inactive">OFF SESSION</div>
         <div class="clock" id="clock">--:--:-- PST</div>
     </div>
@@ -559,7 +560,7 @@
             <span id="connStatus">Connecting...</span>
         </div>
         <div>
-            Data: Yahoo Finance (Free) | Updates: 1s price / 5s analysis
+            Data: <span id="dataSource">Yahoo Finance (Free)</span> | Updates: 1s price / 5s analysis
         </div>
         <div id="lastUpdate">--</div>
     </div>
@@ -1028,6 +1029,25 @@ window.addEventListener('load', () => {
     initChart();
     updateClock();
     setInterval(updateClock, 1000);
+
+    // Check data mode
+    fetch('/api/session-status').then(r => r.json()).then(data => {
+        const el = document.getElementById('dataMode');
+        const src = document.getElementById('dataSource');
+        if (data.data_mode === 'SIMULATED') {
+            el.textContent = 'SIMULATED';
+            el.style.background = 'rgba(139,92,246,0.15)';
+            el.style.color = '#8b5cf6';
+            el.style.border = '1px solid rgba(139,92,246,0.3)';
+            src.textContent = 'Simulated (Demo)';
+        } else {
+            el.textContent = 'LIVE';
+            el.style.background = 'rgba(16,185,129,0.15)';
+            el.style.color = '#10b981';
+            el.style.border = '1px solid rgba(16,185,129,0.3)';
+            src.textContent = 'Yahoo Finance (Live)';
+        }
+    });
 
     // Refresh chart data every 60s
     setInterval(loadChartData, 60000);

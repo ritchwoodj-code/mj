@@ -21,7 +21,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
 # Initialize services
 mds = MarketDataService()
-agent = TradingAgent(mds)
+agent = TradingAgent(mds)  # demo_mode set after start()
 
 
 # --- WebSocket Callbacks ---
@@ -128,6 +128,7 @@ def api_session_status():
         "session_name": name,
         "current_time_pst": now.strftime("%H:%M:%S PST"),
         "sessions": TRADING_SESSIONS,
+        "data_mode": "LIVE" if mds.is_live() else "SIMULATED",
     })
 
 
@@ -170,6 +171,10 @@ def start_services():
     """Initialize and start market data and agent services."""
     logger.info("Starting market data service...")
     mds.start()
+    # Enable demo mode (analyze outside trading hours) when using simulated data
+    if not mds.is_live():
+        agent.demo_mode = True
+        logger.info("Demo mode enabled - agent will analyze at all times.")
     logger.info("Starting trading agent...")
     agent.start()
 
